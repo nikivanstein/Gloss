@@ -15,11 +15,6 @@ from mpi4py import MPI
 
 
 
-#### GENERAL SETTINGS  ##########################################################
-
-
-
-
 availablemarkers = np.array([".",",","o","v","^"	,"<",">","1","2","3","4","8","s","p","*","h","H","+","x","D","d","|","_"])
 colors = ["#000000","#FF0000","#0FF000","#00FF00","#000FF0"	,"#0000FF","#F0000F","#FFF000","#0FFF00","#00FFF0","#000FFF","#F000FF","#FF00FF","#F0FF0F","#888888","#880000","#008800","#000088","#888800","#008888","#880088","#440044","#440000"]
 colors = np.array(colors)
@@ -158,14 +153,20 @@ def generate(nClusters=3,dimentions=140,nOutliers=40,nPoints=800, rrange=6,seed=
 from time import time
 def syntheticData():
 	configuration = []
+
+
 	size = MPI.COMM_WORLD.Get_size() 
 	rank = MPI.COMM_WORLD.Get_rank() 
 	name = MPI.Get_processor_name()
 	comm = MPI.COMM_WORLD
+
 	rs = [2,3,4,5,10]
 	r = rs[rank]
+
 	#dims = [10,20,50,100,200,400]
 	#dim = dims[rank]
+
+
 	for dim in [10,20,50,100,200,400]:
 		for c in [2,3,5]:
 			configuration.append([c,dim,50,1000,r])
@@ -222,19 +223,11 @@ def syntheticData():
 			soup_scores = soup.local_outlier_search(feature_start=di_window*2,feature_end=di_window*2+2)
 			soup_window_scores.append(soup_scores)
 		soup_time += time() - t0
-		#soup_window_scores.append(soup_initial)
 		soup_window_scores = np.array(soup_window_scores)
-
 		soup_scores = soup_window_scores.max(axis=0)
 		fpr_soup,tpr_soup, th = roc_curve(y_true, soup_scores)
-		#print soup_scores.shape
-		#print "Done Soup"
-
 		print "Times:", loop_time, loop_local_time, soup_time,  hics_time, lof_time
 
-		#plot
-		#Save all the results!
-		#
 		to_save = []
 		hics_scores = np.array(hics_scores)[:,0]
 		lof_scores = np.array(lof_scores)[:,0]
@@ -247,17 +240,22 @@ def syntheticData():
 		to_save.append(soup_scores)
 		
 		times = np.array([loop_time, loop_local_time, soup_time, hics_time, lof_time])
+		
+
 		to_save = np.array(to_save)
 		np.save("roc_conf_scores"+str(r)+"_"+str(conf_teller)+".npy",to_save)
 		np.save("roc_conf_times"+str(r)+"_"+str(conf_teller)+".npy",times)
 		
-		#plot ROC curves
+		
 		plt.figure()
+		
 		plt.plot(fpr_loop, tpr_loop, label='LoOP')
 		plt.plot(fpr_lof, tpr_lof, label='LOF')
 		plt.plot(fpr_hics, tpr_hics, label='HiCS')
 		plt.plot(fpr_soup, tpr_soup, label='GLocal')
 		plt.plot(fpr_lloop, tpr_lloop, label='LoOP local')
+
+
 		plt.plot([0, 1], [0, 1], 'k--')
 		plt.xlim([0.0, 1.0])
 		plt.ylim([0.0, 1.05])
@@ -268,26 +266,82 @@ def syntheticData():
 		plt.savefig("img/roc_r"+str(r)+"-"+str(conf_teller)+".png")
 		conf_teller += 1
 		plt.clf()
+		
 	exit()
 
-def existingData(rank=0, k=10): #'ann_thyroid.arff','Ann Thyroid',
-	datasets = ['ann_thyroid.arff','arrhythmia.arff','diabetes.arff','glass.arff','ionosphere.arff','pendigits16.arff', 'breast.arff', 'breast_diagnostic.arff']
-	names = ['Ann Thyroid','Arrhythmia','Diabetes','Glass','Ionosphere','Pen Digits 16', 'Breast', 'Breast Diag.']
+
+
+def convertToNumeric(convertiondict,x,d):
+	try:
+		float(x)
+		return float(x)
+	except ValueError:
+		if d not in convertiondict.keys():
+			convertiondict[d] = []
+		if x not in convertiondict[d]:
+			convertiondict[d].append(x)
+		return convertiondict[d].index(x)
+
+def existingData(rank=0, k=20): 
+
+	datasets = ['uci-20070111-hypothyroid.arff','uci-20070111-arrhythmia.arff','uci-20070111-glass.arff' ,'uci-20070111-diabetes.arff', 'uci-20070111-ionosphere.arff', 'uci-20070111-pendigits.arff' ]
+	names = ['Ann Thyroid','Arrhythmia','Glass', 'Diabetes','Ionosphere', 'Pen Digits 16']
+
 	size = MPI.COMM_WORLD.Get_size() 
 	#rank = MPI.COMM_WORLD.Get_rank() 
 	name = MPI.Get_processor_name()
 	comm = MPI.COMM_WORLD
+
 	ds = datasets[rank]
 	name = names[rank]
 	conf_teller = rank
+
 	print "conf",conf_teller
 	d, meta = arff.loadarff("datasets/"+ds)
-	d = np.asarray(d.tolist(), dtype=np.float32)
+	d = np.asarray(d.tolist())
+
+	convertiondict = {}
+	for y in range(len(d[0])):
+		for x in range(len(d)):
+			d[x,y] = convertToNumeric(convertiondict, d[x,y],y)
+	d = d.astype('float64')
+
+	d = np.nan_to_num(d)
 	print d.shape
+
+	classattr = d[:,-1]
+
+	#introduce 5% outliers
+	outliers = []
+	lend = len(d)
+	dimentions = len(d[0])
+	lenoutliers = int(lend * 0.05)+1
+	for o in range(lenoutliers):
+		#take random unit
+		
+		ri = np.random.randint(0,lend)
+		while ri in outliers:
+			ri = np.random.randint(0,lend)
+		ri_c = classattr[ri]
+		rj_c = ri_c
+		while rj_c == ri_c:
+			#pick random other point
+			rj = np.random.randint(0,lend)
+			rj_c = classattr[rj]
+		
+		#transform the point "weird" in a few dimentions (maximum 10% or 2)
+		maxd = max(2,int(dimentions *0.1))
+		trans_d = np.random.randint(0,4)+1
+		ri_d = np.random.randint(0,dimentions-trans_d)
+		for di in range(trans_d):
+			d[ri,ri_d+di] = d[rj,ri_d+di]
+		outliers.append(ri)
 	
-	y_true = d[:,-1]
-	y_true = np.array(y_true)
+	y_true = np.zeros(lend)
+	y_true[outliers] = 1
+	#y_true = np.array(y_true)
 	d = d[:,:-1] #remove last column
+
 
 	dim = len(d[0])
 	dataset = np.c_[d,y_true]
@@ -340,12 +394,8 @@ def existingData(rank=0, k=10): #'ann_thyroid.arff','Ann Thyroid',
 	fpr_soup,tpr_soup, th = roc_curve(y_true, soup_scores)
 	#print soup_scores.shape
 	#print "Done Soup"
-	print "Times:", loop_time, loop_local_time, soup_time,  hics_time, lof_time
 
-	#plot
-	#
-	#Save all the results!
-	#
+	print "Times:", loop_time, loop_local_time, soup_time,  hics_time, lof_time
 	to_save = []
 	hics_scores = np.array(hics_scores)[:,0]
 	lof_scores = np.array(lof_scores)[:,0]
@@ -364,12 +414,16 @@ def existingData(rank=0, k=10): #'ann_thyroid.arff','Ann Thyroid',
 	np.save("roc_conf_scores"+str(ds)+"_"+str(conf_teller)+".npy",to_save)
 	np.save("roc_conf_times"+str(ds)+"_"+str(conf_teller)+".npy",times)
 	
+	
 	plt.figure()
+	
 	plt.plot(fpr_loop, tpr_loop, label='LoOP')
 	plt.plot(fpr_lof, tpr_lof, label='LOF')
 	plt.plot(fpr_hics, tpr_hics, label='HiCS')
 	plt.plot(fpr_soup, tpr_soup, label='GLoss')
 	plt.plot(fpr_lloop, tpr_lloop, label='LoOP local')
+
+
 	plt.plot([0, 1], [0, 1], 'k--')
 	plt.xlim([0.0, 1.0])
 	plt.ylim([0.0, 1.05])
@@ -383,16 +437,16 @@ def existingData(rank=0, k=10): #'ann_thyroid.arff','Ann Thyroid',
 		
 
 
+
 #run either existing Data experiments or synthetic 
 #exsting :
+
 existingData(0)
 existingData(1)
 existingData(2)
 existingData(3)
 existingData(4)
 existingData(5)
-existingData(6)
-existingData(7)
 
 #synthetic:
 #syntheticData()

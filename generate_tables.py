@@ -101,11 +101,19 @@ for d in  [10,20,50,100,200,400]: #,50,100,200,400
 
 #existing datasets
 print "existing datasets"
-datasets = ['ann_thyroid.arff','arrhythmia.arff','diabetes.arff','glass.arff','ionosphere.arff','pendigits16.arff', 'breast.arff', 'breast_diagnostic.arff']
-names = ['Ann Thyroid','Arrhythmia','Diabetes','Glass','Ionosphere','Pen Digits 16', 'Breast', 'Breast Diag.']
+
+datasets = ['uci-20070111-hypothyroid.arff','uci-20070111-arrhythmia.arff','uci-20070111-glass.arff' ,'uci-20070111-diabetes.arff', 'uci-20070111-ionosphere.arff', 'uci-20070111-pendigits.arff' ]
+names = ['Ann Thyroid','Arrhythmia','Glass', 'Diabetes','Ionosphere', 'Pen Digits 16']
 
 #np.save("roc_conf_scores"+str(ds)+"_"+str(conf_teller)+".npy",to_save)
 #np.save("roc_conf_times"+str(ds)+"_"+str(conf_teller)+".npy",times)
+
+averages = {}
+averages["hics"] = []
+averages["lof"] = []
+averages["loop"] = []
+averages["lloop"] = []
+averages["soup"] = []
 
 print "{\\Dataset\\ } & {\\ HiCS\\ } & {\\ LOF\\ } & {\\ LoOP\\ } & {Local LoOP} & {\\ \\algName{}\\ } \\\\"
 for ds in  range(len(names)): 
@@ -113,12 +121,19 @@ for ds in  range(len(names)):
 	dataset = datasets[ds]
 	scores = np.load("roc_conf_scores"+str(dataset)+"_"+str(ds)+".npy")
 	aucs_hics =  metrics.roc_auc_score(scores[0],scores[1])
+	averages["hics"].append(aucs_hics)
 	aucs_lof = metrics.roc_auc_score(scores[0],scores[2])
+	averages["lof"].append(aucs_lof)
 	aucs_loop =  metrics.roc_auc_score(scores[0],scores[3])
+	averages["loop"].append(aucs_loop)
 	aucs_lloop =  metrics.roc_auc_score(scores[0],scores[4])
+	averages["lloop"].append(aucs_lloop)
 	aucs_soup = metrics.roc_auc_score(scores[0],scores[5])
+	averages["soup"].append(aucs_soup)
 	print name,"&", aucs_hics,"&", aucs_lof,"&", aucs_loop,"&", aucs_lloop,"&", aucs_soup ,"\\\\"
 
+print "Average","&", np.array(averages["hics"]).mean(),"&", np.array(averages["lof"]).mean(),"&", np.array(averages["loop"]).mean(),"&", np.array(averages["lloop"]).mean(),"&", np.array(averages["soup"]).mean() ,"\\\\"
+print "Std","&", np.array(averages["hics"]).std(),"&", np.array(averages["lof"]).std(),"&", np.array(averages["loop"]).std(),"&", np.array(averages["lloop"]).std(),"&", np.array(averages["soup"]).std() ,"\\\\"
 
 print "time"
 print "{\\Dataset\\ } & {\\ HiCS\\ } & {\\ LOF\\ } & {\\ LoOP\\ } & {Local LoOP} & {\\ \\algName{}\\ } \\\\"
